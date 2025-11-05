@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && npm run copy-env",
-    "copy-env": "cp .env dist/.env",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
