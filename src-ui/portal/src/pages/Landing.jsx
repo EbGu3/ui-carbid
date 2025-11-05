@@ -15,7 +15,7 @@ export default function Landing(){
                     <div className="absolute inset-0 -top-10 -bottom-12 -left-8 -right-8 slanted bg-brand-300 opacity-60 rounded-[40px]" />
                     <div className="relative"><Carousel height={560}/></div>
 
-                    <div className="absolute bottom-6 left-6 text-xs bg-white/90 rounded-full px-3 py-1">v1.4</div>
+                    <div className="absolute bottom-6 left-6 text-xs bg-white/90 rounded-full px-3 py-1">v1.5</div>
                 </div>
 
                 <div className="mt-10 flex items-center justify-between">

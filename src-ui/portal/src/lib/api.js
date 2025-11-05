@@ -1,7 +1,7 @@
 // src/lib/api.js
 import { getToken } from './session'
 
-export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace(/\/$/, '')
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api').replace(/\/$/, '')
 
 // Defensa extra por si algún código externo setea algo raro
 function safeToken() {
