@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1,
+    "marca": "Ford",
+    "modelo": "Mustang",
+    "anio": 1969,
+    "precioBase": 200000,
+    "lote": "F54",
+    "imagesKey": "MUSTANG"
+  },
+  {
+    "id": 2,
+    "marca": "Dodge",
+    "modelo": "Charger",
+    "anio": 1970,
+    "precioBase": 150000,
+    "lote": "M12",
+    "imagesKey": "CHARGER"
+  },
+  {
+    "id": 3,
+    "marca": "Honda",
+    "modelo": "Civic",
+    "anio": 1998,
+    "precioBase": 5000,
+    "lote": "C03",
+    "imagesKey": "CIVIC"
+  }
+]

@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { --header-height: 72px; }
+
+.slanted { transform: rotate(-7deg); }
+.hover-lift { transition: transform .2s ease, box-shadow .2s ease; }
+.hover-lift:hover { transform: translateY(-4px); box-shadow: 0 10px 30px rgba(0,0,0,.10); }
+
+:focus-visible { outline: 2px solid rgba(0,0,0,.6); outline-offset: 2px; }
+
+@layer components {
+    .btn-primary { @apply px-5 py-2.5 rounded-full bg-black text-white hover:bg-brand-900 active:scale-[.98] transition; }
+    .btn-ghost { @apply px-4 py-2 rounded-full bg-transparent border border-black/10 hover:bg-black/5; }
+    .card { @apply bg-white rounded-3xl shadow-soft; }
+}
