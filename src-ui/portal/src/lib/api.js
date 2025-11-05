@@ -1,7 +1,24 @@
 // src/lib/api.js
 import { getToken } from './session'
 
-export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace(/\/$/, '')
+export let API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api').replace(/\/$/, '')
+
+let configLoaded = false
+const configPromise = fetch('/json/app_config.json')
+    .then(res => res.json())
+    .then(config => {
+        if (config.api_url) {
+            API_BASE = config.api_url.replace(/\/$/, '')
+            console.log('✅ API_BASE cargado')
+        }
+        configLoaded = true
+        return config
+    })
+    .catch(err => {
+        console.warn('⚠️ No se pudo cargar app_config.json, usando valor por defecto:', API_BASE)
+        configLoaded = true
+        return null
+    })
 
 // Defensa extra por si algún código externo setea algo raro
 function safeToken() {
@@ -13,6 +30,10 @@ function safeToken() {
 
 async function http(path, { method = 'GET', body, headers = {}, ...options } = {}) {
   const token = safeToken();
+
+  if (!configLoaded) {
+      await configPromise
+  }
 
   const res = await fetch(API_BASE + path, {
     method,
