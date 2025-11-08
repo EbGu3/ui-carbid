@@ -41,14 +41,17 @@ export default function Login() {
 
   const enviar = async (e) => {
     e.preventDefault()
+    if (loading) return // evita doble submit
     setError('')
     setLoading(true)
     try {
-      await login(correo, password)
+      await login(correo.trim(), password)
       nav(next || '/inicio', { replace: true })
     } catch (err) {
       setError(err?.message || 'Error de autenticación')
-      setLoading(false) // solo apagar loading si hubo error; si navega, no se nota
+    } finally {
+      // asegúrate de apagar el overlay tanto en éxito como en error
+      setLoading(false)
     }
   }
 
@@ -76,7 +79,7 @@ export default function Login() {
                 <input
                     placeholder="Correo electrónico"
                     type="email"
-                    autoComplete="email"
+                    autoComplete="username"
                     value={correo}
                     onChange={(e) => setCorreo(e.target.value)}
                     className="w-full px-4 py-2.5 bg-transparent border-b border-white/60 text-white placeholder-white/60 focus:outline-none focus:border-white disabled:opacity-60"
@@ -96,12 +99,11 @@ export default function Login() {
                 />
 
                 {error && (
-                    <div className="text-xs text-red-300" role="alert">
+                    <div className="text-xs text-red-300" role="alert" aria-live="assertive">
                       {error}
                     </div>
                 )}
 
-                {/* Botón con spinner inline y estados accesibles */}
                 <button
                     type="submit"
                     disabled={loading}
