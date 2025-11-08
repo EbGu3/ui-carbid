@@ -6,7 +6,7 @@ export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:
 
 // ===== Config de transporte para login =====
 // 'qs' = GET con query-string (sin body, sin Content-Type)
-// 'post' = POST JSON (usa body) – NO usar mientras tengas el issue del 504
+// 'post' = POST JSON (usa body)
 const LOGIN_TRANSPORT = 'qs'
 
 // Defensa por si alguien dejó basura en storage
@@ -117,10 +117,8 @@ export const Api = {
     login: (email, password) => {
       if (LOGIN_TRANSPORT === 'qs') {
         const q = qs({ email, password })
-        // método GET, sin body, sin Content-Type → evita el colgado
         return http(`/auth/login?${q}`, { method: 'GET', timeoutMs: 12000 })
       }
-      // Alternativa POST JSON (cuando ya no tengas el 504)
       return http('/auth/login', {
         method: 'POST',
         body: { email, password },
@@ -130,8 +128,12 @@ export const Api = {
 
     me: () => http('/auth/me', { timeoutMs: 12000 }),
 
-    register: (payload) =>
-        http('/auth/register', { method: 'POST', body: payload, timeoutMs: 15000 }),
+    // ===== REGISTER por POST **sin body** con query-string =====
+    register: ({ name, email, password, role = 'buyer' }) => {
+      const q = qs({ name, email, password, role })
+      // No body, sin Content-Type → evita el problema del body
+      return http(`/auth/register?${q}`, { method: 'POST', timeoutMs: 15000 })
+    },
 
     changePassword: ({ old_password, new_password }) =>
         http('/auth/change-password', {
@@ -144,46 +146,26 @@ export const Api = {
   vehicles: {
     list: (q) => http('/vehicles' + (q ? `?q=${encodeURIComponent(q)}` : ''), { timeoutMs: 12000 }),
 
-    // ====== POST /vehicles SIN BODY (usa query-string) ======
+    // POST /vehicles SIN body (query-string)
     create: (payload = {}) => {
       const {
-        make,
-        model,
-        year,
-        base_price,
-        lot_code,
-        description,
-        status,
-        min_increment,
-        images,
-        images_csv, // opcional si ya viene pre-concatenado
+        make, model, year, base_price, lot_code, description,
+        status, min_increment, images, images_csv,
       } = payload
 
       const params = new URLSearchParams()
-
-      // básicos
       if (make) params.set('make', String(make).trim())
       if (model) params.set('model', String(model).trim())
       if (lot_code) params.set('lot_code', String(lot_code).trim())
-
       if (year != null) params.set('year', String(year))
       if (base_price != null) params.set('base_price', String(base_price))
       if (min_increment != null) params.set('min_increment', String(min_increment))
       if (status) params.set('status', String(status).trim())
       if (description) params.set('description', String(description))
-
-      // imágenes: preferimos repetir ?images=...&images=...
       const imgs = images_csv ? normalizeImages(images_csv) : normalizeImages(images)
-      if (imgs.length) {
-        imgs.forEach(u => params.append('images', u))
-      }
+      imgs.forEach(u => params.append('images', u))
 
-      // POST sin body ni Content-Type → evita preflight y el problema del body
-      return http(`/vehicles?${params.toString()}`, {
-        method: 'POST',
-        // sin body
-        timeoutMs: 15000,
-      })
+      return http(`/vehicles?${params.toString()}`, { method: 'POST', timeoutMs: 15000 })
     },
 
     get: (id) => http(`/vehicles/${id}`, { timeoutMs: 12000 }),
