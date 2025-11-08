@@ -84,10 +84,13 @@ async function http(path, { method = 'GET', body, headers = {}, timeoutMs = 1200
 
 export const Api = {
   auth: {
+    // TEMP (workaround): mandamos body + querystring por si el proxy bloquea el body
     login: (email, password) =>
-        http('/auth/login', { method: 'POST', body: { email, password }, timeoutMs: 12000 }),
-    me: () =>
-        http('/auth/me', { timeoutMs: 12000 }),
+        http(
+            `/auth/login?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`,
+            { method: 'POST', body: { email, password }, timeoutMs: 12000 }
+        ),
+    me: () => http('/auth/me', { timeoutMs: 12000 }),
     register: (payload) =>
         http('/auth/register', { method: 'POST', body: payload, timeoutMs: 15000 }),
     changePassword: ({ old_password, new_password }) =>
