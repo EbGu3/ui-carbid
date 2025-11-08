@@ -11,18 +11,28 @@ export const useAuth = create((set, get) => ({
   autenticado: !!getSessToken(),
   token: getSessToken(),
   usuario: loadUser(),
+  _inFlightLogin: false,
 
   async login(email, password) {
-    const res = await Api.auth.login(email, password) // {token, user}
-    setSessToken(res.token)
-    localStorage.setItem('cb_user', JSON.stringify(res.user))
-    set({ autenticado: true, token: res.token, usuario: res.user })
+    if (get()._inFlightLogin) return // evita doble submit en ráfaga
+    set({ _inFlightLogin: true })
+    try {
+      const res = await Api.auth.login(email, password) // { token, user }
+      // Persistencia
+      setSessToken(res.token)
+      localStorage.setItem('cb_user', JSON.stringify(res.user))
+      set({ autenticado: true, token: res.token, usuario: res.user })
 
-    // SOCKET: conecta y refresca auth
-    connectSocket()
-    refreshAuth()
+      // No bloquees la promesa del login por la conexión del socket
+      queueMicrotask(() => {
+        connectSocket()
+        refreshAuth()
+      })
 
-    return res
+      return res
+    } finally {
+      set({ _inFlightLogin: false })
+    }
   },
 
   async me() {
@@ -30,12 +40,13 @@ export const useAuth = create((set, get) => ({
     localStorage.setItem('cb_user', JSON.stringify(u))
     set({ usuario: u, autenticado: true })
 
-    // Si el usuario tiene token y no está conectado, conecta socket
+    // Si hay token, asegura socket (no bloquea)
     if (getSessToken()) {
-      connectSocket()
-      refreshAuth()
+      queueMicrotask(() => {
+        connectSocket()
+        refreshAuth()
+      })
     }
-
     return u
   },
 
@@ -48,7 +59,6 @@ export const useAuth = create((set, get) => ({
     clearSessToken()
     localStorage.removeItem('cb_user')
     set({ autenticado: false, token: null, usuario: null })
-    // SOCKET: desconecta
     disconnectSocket()
   },
 
