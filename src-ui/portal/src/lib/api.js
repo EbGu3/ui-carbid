@@ -42,7 +42,7 @@ async function tryParseBody(res) {
 async function http(path, { method = 'GET', body, headers = {}, timeoutMs = 12000, ...options } = {}) {
   const token = safeToken()
 
-  // Log útil para confirmar base en consola
+  // Log útil para confirmar base en consola (solo login)
   if (typeof window !== 'undefined' && path.startsWith('/auth/login')) {
     console.log('[login] API_BASE =', API_BASE, '| transport =', LOGIN_TRANSPORT)
   }
@@ -101,6 +101,16 @@ function qs(params) {
   return u.toString()
 }
 
+// Normaliza imágenes desde string "a,b,c" o array → array limpio
+function normalizeImages(imgs) {
+  if (!imgs) return []
+  if (Array.isArray(imgs)) return imgs.map(s => String(s).trim()).filter(Boolean)
+  return String(imgs)
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+}
+
 export const Api = {
   auth: {
     // LOGIN por query-string SIN body (GET simple request)
@@ -133,15 +143,64 @@ export const Api = {
 
   vehicles: {
     list: (q) => http('/vehicles' + (q ? `?q=${encodeURIComponent(q)}` : ''), { timeoutMs: 12000 }),
-    create: (payload) => http('/vehicles', { method: 'POST', body: payload, timeoutMs: 15000 }),
+
+    // ====== POST /vehicles SIN BODY (usa query-string) ======
+    create: (payload = {}) => {
+      const {
+        make,
+        model,
+        year,
+        base_price,
+        lot_code,
+        description,
+        status,
+        min_increment,
+        images,
+        images_csv, // opcional si ya viene pre-concatenado
+      } = payload
+
+      const params = new URLSearchParams()
+
+      // básicos
+      if (make) params.set('make', String(make).trim())
+      if (model) params.set('model', String(model).trim())
+      if (lot_code) params.set('lot_code', String(lot_code).trim())
+
+      if (year != null) params.set('year', String(year))
+      if (base_price != null) params.set('base_price', String(base_price))
+      if (min_increment != null) params.set('min_increment', String(min_increment))
+      if (status) params.set('status', String(status).trim())
+      if (description) params.set('description', String(description))
+
+      // imágenes: preferimos repetir ?images=...&images=...
+      const imgs = images_csv ? normalizeImages(images_csv) : normalizeImages(images)
+      if (imgs.length) {
+        imgs.forEach(u => params.append('images', u))
+      }
+
+      // POST sin body ni Content-Type → evita preflight y el problema del body
+      return http(`/vehicles?${params.toString()}`, {
+        method: 'POST',
+        // sin body
+        timeoutMs: 15000,
+      })
+    },
+
     get: (id) => http(`/vehicles/${id}`, { timeoutMs: 12000 }),
+
     upcoming: (limit = 10) =>
         http(`/vehicles/upcoming?limit=${encodeURIComponent(limit)}`, { timeoutMs: 12000 }),
+
     bids: {
       list: (vehicleId) => http(`/vehicles/${vehicleId}/bids`, { timeoutMs: 12000 }),
+      // POST sin body, con amount en QS
       place: (vehicleId, amount) =>
-          http(`/vehicles/${vehicleId}/bids?amount=${encodeURIComponent(amount)}`, { method: 'POST', timeoutMs: 15000 }),
+          http(`/vehicles/${vehicleId}/bids?amount=${encodeURIComponent(amount)}`, {
+            method: 'POST',
+            timeoutMs: 15000,
+          }),
     },
+
     sseUrl: (vehicleId) => `${API_BASE}/sse/vehicles/${vehicleId}`,
   },
 
