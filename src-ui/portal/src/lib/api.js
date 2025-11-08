@@ -140,7 +140,7 @@ export const Api = {
     bids: {
       list: (vehicleId) => http(`/vehicles/${vehicleId}/bids`, { timeoutMs: 12000 }),
       place: (vehicleId, amount) =>
-          http(`/vehicles/${vehicleId}/bids`, { method: 'POST', body: { amount }, timeoutMs: 15000 }),
+          http(`/vehicles/${vehicleId}/bids?amount=${encodeURIComponent(amount)}`, { method: 'POST', timeoutMs: 15000 }),
     },
     sseUrl: (vehicleId) => `${API_BASE}/sse/vehicles/${vehicleId}`,
   },
