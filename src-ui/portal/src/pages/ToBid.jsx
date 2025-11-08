@@ -1,3 +1,4 @@
+// src/pages/ToBid.jsx
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import BidPanel from '../components/BidPanel.jsx'
@@ -17,8 +18,11 @@ export default function ToBid() {
     const { autenticado } = useAuth()
     const nav = useNavigate()
 
+    const mounted = useRef(false)
+
     // Carga inicial del vehículo
     useEffect(() => {
+        mounted.current = true
         let active = true
         setLoading(true)
         Api.vehicles.get(id)
@@ -30,33 +34,53 @@ export default function ToBid() {
             })
             .catch((err) => setError(err.message || 'Error al cargar el vehículo'))
             .finally(() => setLoading(false))
-        return () => { active = false }
+
+        return () => { active = false; mounted.current = false }
     }, [id])
 
     // Suscripción Socket.IO a sala del vehículo
     useEffect(() => {
-        if (!vehicle) return
+        if (!vehicle?.id) return
+
         const s = connectSocket()
+        const vid = Number(vehicle.id)
+
+        // Listeners *idempotentes* por instancia del componente
         const onTop = (payload) => {
-            if (payload?.vehicleId === vehicle.id) setMonto(payload.top)
+            if (!mounted.current) return
+            if (payload?.vehicleId === vid && typeof payload.top === 'number') {
+                setMonto(payload.top)
+            }
         }
         const onClosed = (payload) => {
-            if (payload?.vehicleId === vehicle.id) setStatus('closed')
+            if (!mounted.current) return
+            if (payload?.vehicleId === vid) setStatus('closed')
         }
-        subscribeVehicle(vehicle.id)
+
+        // Suscribir sala y también re-suscribir si justo conectó ahora
+        subscribeVehicle(vid)
+        const onConnect = () => subscribeVehicle(vid)
+        s.on('connect', onConnect)
+
+        // Eventos en vivo
         s.on('top-updated', onTop)
         s.on('closed', onClosed)
+
+        // Limpieza
         return () => {
+            s.off('connect', onConnect)
             s.off('top-updated', onTop)
             s.off('closed', onClosed)
-            unsubscribeVehicle(vehicle.id)
+            unsubscribeVehicle(vid)
         }
-    }, [vehicle])
+    }, [vehicle?.id])
 
     const confirmarOferta = async (m) => {
         if (!autenticado) { nav(`/login?next=${encodeURIComponent(location.pathname)}`); return }
         try {
+            // POST + query-string (sin body → evita preflight)
             const r = await Api.vehicles.bids.place(id, m)
+            // El socket actualizará a todos; localmente refleja de inmediato
             setMonto(r.amount)
         } catch (err) {
             const min = err?.extra?.min_required
@@ -91,7 +115,7 @@ export default function ToBid() {
                 {!autenticado && (
                     <div className="card p-4 flex items-center justify-between">
                         <span>Debes iniciar sesión para ofertar.</span>
-                        <Button onClick={()=>nav(`/login?next=${encodeURIComponent(location.pathname)}`)}>Iniciar sesión</Button>
+                        <Button onClick={() => nav(`/login?next=${encodeURIComponent(location.pathname)}`)}>Iniciar sesión</Button>
                     </div>
                 )}
             </div>
