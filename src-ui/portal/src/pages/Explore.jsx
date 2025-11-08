@@ -1,9 +1,9 @@
-// src/pages/Explore.jsx
 import { useEffect, useState } from 'react'
 import VehicleCard from '../components/VehicleCard.jsx'
 import Tabs from '../components/Tabs.jsx'
 import { Api } from '../lib/api'
 import { useAuth } from '../store/auth'
+import { connectSocket } from '../lib/socket'
 
 export default function Explore() {
     const [tab, setTab] = useState('todos')
@@ -21,6 +21,7 @@ export default function Explore() {
     useEffect(() => {
         let active = true
         setLoading(true)
+        setError('')
         Api.vehicles.list(q)
             .then((data) => { if (active) setVehiculos(data) })
             .catch((err) => { if (active) setError(err.message || 'Error cargando vehículos') })
@@ -48,6 +49,20 @@ export default function Explore() {
         }
         return () => { active = false }
     }, [tab, autenticado])
+
+    // Tiempo real para notificaciones (cuando la pestaña 'notif' está activa)
+    useEffect(() => {
+        if (!autenticado || tab !== 'notif') return
+        const s = connectSocket()
+        const onNotif = () => {
+            // Re-fetch ligero al llegar cualquier notificación nueva
+            Api.users.notifications.list().then(setNotifs).catch(() => {})
+        }
+        s.on('notification', onNotif)
+        return () => {
+            s.off('notification', onNotif)
+        }
+    }, [autenticado, tab])
 
     const marcarLeidas = async () => {
         try {

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { Api } from '../lib/api'
 import { setToken as setSessToken, clearToken as clearSessToken, getToken as getSessToken } from '../lib/session'
+import { connectSocket, refreshAuth, disconnectSocket } from '../lib/socket'
 
 const loadUser = () => {
   try { return JSON.parse(localStorage.getItem('cb_user') || 'null') } catch { return null }
@@ -16,6 +17,11 @@ export const useAuth = create((set, get) => ({
     setSessToken(res.token)
     localStorage.setItem('cb_user', JSON.stringify(res.user))
     set({ autenticado: true, token: res.token, usuario: res.user })
+
+    // SOCKET: conecta y refresca auth
+    connectSocket()
+    refreshAuth()
+
     return res
   },
 
@@ -23,6 +29,13 @@ export const useAuth = create((set, get) => ({
     const u = await Api.auth.me()
     localStorage.setItem('cb_user', JSON.stringify(u))
     set({ usuario: u, autenticado: true })
+
+    // Si el usuario tiene token y no está conectado, conecta socket
+    if (getSessToken()) {
+      connectSocket()
+      refreshAuth()
+    }
+
     return u
   },
 
@@ -35,6 +48,8 @@ export const useAuth = create((set, get) => ({
     clearSessToken()
     localStorage.removeItem('cb_user')
     set({ autenticado: false, token: null, usuario: null })
+    // SOCKET: desconecta
+    disconnectSocket()
   },
 
   isSeller() {

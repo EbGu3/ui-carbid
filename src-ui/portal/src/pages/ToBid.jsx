@@ -5,6 +5,7 @@ import Img from '../components/Img.jsx'
 import { Api } from '../lib/api'
 import { useAuth } from '../store/auth'
 import Button from '../components/Button'
+import { connectSocket, subscribeVehicle, unsubscribeVehicle } from '../lib/socket'
 
 export default function ToBid() {
     const { id } = useParams()
@@ -14,9 +15,9 @@ export default function ToBid() {
     const [monto, setMonto] = useState(0)
     const [status, setStatus] = useState('active')
     const { autenticado } = useAuth()
-    const esRef = useRef(null)
     const nav = useNavigate()
 
+    // Carga inicial del vehículo
     useEffect(() => {
         let active = true
         setLoading(true)
@@ -32,20 +33,24 @@ export default function ToBid() {
         return () => { active = false }
     }, [id])
 
+    // Suscripción Socket.IO a sala del vehículo
     useEffect(() => {
         if (!vehicle) return
-        const url = Api.vehicles.sseUrl(vehicle.id)
-        const es = new EventSource(url)
-        esRef.current = es
-        es.addEventListener('top-updated', (ev) => {
-            try {
-                const data = JSON.parse(ev.data)
-                if (data.vehicleId === vehicle.id) setMonto(data.top)
-            } catch {}
-        })
-        es.addEventListener('closed', () => setStatus('closed'))
-        es.onerror = () => {}
-        return () => { es.close() }
+        const s = connectSocket()
+        const onTop = (payload) => {
+            if (payload?.vehicleId === vehicle.id) setMonto(payload.top)
+        }
+        const onClosed = (payload) => {
+            if (payload?.vehicleId === vehicle.id) setStatus('closed')
+        }
+        subscribeVehicle(vehicle.id)
+        s.on('top-updated', onTop)
+        s.on('closed', onClosed)
+        return () => {
+            s.off('top-updated', onTop)
+            s.off('closed', onClosed)
+            unsubscribeVehicle(vehicle.id)
+        }
     }, [vehicle])
 
     const confirmarOferta = async (m) => {
