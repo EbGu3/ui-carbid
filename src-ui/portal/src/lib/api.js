@@ -1,9 +1,15 @@
 // src/lib/api.js
 import { getToken } from './session'
 
+// Base de API
 export const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api').replace(/\/$/, '')
 
-// Defensa extra por si algún código externo setea algo raro
+// ===== Config de transporte para login =====
+// 'qs' = GET con query-string (sin body, sin Content-Type)
+// 'post' = POST JSON (usa body) – NO usar mientras tengas el issue del 504
+const LOGIN_TRANSPORT = 'qs'
+
+// Defensa por si alguien dejó basura en storage
 function safeToken() {
   const t = getToken()
   if (!t) return null
@@ -11,7 +17,7 @@ function safeToken() {
   return t
 }
 
-// Ejecuta una función asíncrona con AbortController y timeout
+// Wrap con AbortController + timeout
 async function withTimeout(run, ms = 12000) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), ms)
@@ -27,51 +33,55 @@ async function tryParseBody(res) {
   const text = await res.text()
   if (!text) return {}
   if (ct.includes('application/json')) {
-    try { return JSON.parse(text) } catch { /* cae a texto abajo */ }
+    try { return JSON.parse(text) } catch { /* cae a texto */ }
   }
   return text
 }
 
+// HTTP helper
 async function http(path, { method = 'GET', body, headers = {}, timeoutMs = 12000, ...options } = {}) {
   const token = safeToken()
 
-  // Útil en diagnóstico; puedes comentar si no lo necesitas
-  console.log('API_BASE:', API_BASE)
+  // Log útil para confirmar base en consola
+  if (typeof window !== 'undefined' && path.startsWith('/auth/login')) {
+    console.log('[login] API_BASE =', API_BASE, '| transport =', LOGIN_TRANSPORT)
+  }
 
-  try {
-    return await withTimeout(async (signal) => {
-      const res = await fetch(API_BASE + path, {
-        method,
-        headers: {
-          Accept: 'application/json',
-          ...(body ? { 'Content-Type': 'application/json' } : {}),
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          ...headers,
-        },
-        body: body != null ? JSON.stringify(body) : undefined,
-        credentials: 'omit',
-        signal,
-        ...options,
-      })
+  return withTimeout(async (signal) => {
+    const hasBody = body != null
 
-      const parsed = await tryParseBody(res)
+    // IMPORTANTÍSIMO: solo fijamos Content-Type cuando realmente enviamos body
+    const computedHeaders = {
+      Accept: 'application/json',
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    }
 
-      if (!res.ok) {
-        const msg =
-            typeof parsed === 'string'
-                ? parsed
-                : parsed?.error?.message || parsed?.message || `HTTP ${res.status}`
-        const eobj = typeof parsed === 'object' ? (parsed?.error || parsed) : {}
-        const err = new Error(msg)
-        err.extra = eobj
-        err.status = res.status
-        throw err
-      }
+    const res = await fetch(API_BASE + path, {
+      method,
+      headers: computedHeaders,
+      body: hasBody ? JSON.stringify(body) : undefined,
+      credentials: 'omit',
+      signal,
+      ...options,
+    })
 
-      return parsed?.data !== undefined ? parsed.data : parsed
-    }, timeoutMs)
-  } catch (err) {
-    // Mensaje claro si fue un timeout/abort
+    const parsed = await tryParseBody(res)
+
+    if (!res.ok) {
+      const msg = typeof parsed === 'string'
+          ? parsed
+          : parsed?.error?.message || parsed?.message || `HTTP ${res.status}`
+      const eobj = typeof parsed === 'object' ? (parsed?.error || parsed) : {}
+      const err = new Error(msg)
+      err.extra = eobj
+      err.status = res.status
+      throw err
+    }
+
+    return parsed?.data !== undefined ? parsed.data : parsed
+  }, timeoutMs).catch((err) => {
     if (err?.name === 'AbortError') {
       const to = typeof timeoutMs === 'number' ? `${timeoutMs} ms` : 'el tiempo configurado'
       const e = new Error(`Tiempo de espera agotado al contactar la API (${to}).`)
@@ -79,20 +89,40 @@ async function http(path, { method = 'GET', body, headers = {}, timeoutMs = 1200
       throw e
     }
     throw err
-  }
+  })
+}
+
+// Helpers
+function qs(params) {
+  const u = new URLSearchParams()
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) u.set(k, String(v))
+  })
+  return u.toString()
 }
 
 export const Api = {
   auth: {
-    // TEMP (workaround): mandamos body + querystring por si el proxy bloquea el body
-    login: (email, password) =>
-        http(
-            `/auth/login?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`,
-            { method: 'POST', body: { email, password }, timeoutMs: 12000 }
-        ),
+    // LOGIN por query-string SIN body (GET simple request)
+    login: (email, password) => {
+      if (LOGIN_TRANSPORT === 'qs') {
+        const q = qs({ email, password })
+        // método GET, sin body, sin Content-Type → evita el colgado
+        return http(`/auth/login?${q}`, { method: 'GET', timeoutMs: 12000 })
+      }
+      // Alternativa POST JSON (cuando ya no tengas el 504)
+      return http('/auth/login', {
+        method: 'POST',
+        body: { email, password },
+        timeoutMs: 12000,
+      })
+    },
+
     me: () => http('/auth/me', { timeoutMs: 12000 }),
+
     register: (payload) =>
         http('/auth/register', { method: 'POST', body: payload, timeoutMs: 15000 }),
+
     changePassword: ({ old_password, new_password }) =>
         http('/auth/change-password', {
           method: 'POST',
@@ -100,6 +130,7 @@ export const Api = {
           timeoutMs: 15000,
         }),
   },
+
   vehicles: {
     list: (q) => http('/vehicles' + (q ? `?q=${encodeURIComponent(q)}` : ''), { timeoutMs: 12000 }),
     create: (payload) => http('/vehicles', { method: 'POST', body: payload, timeoutMs: 15000 }),
@@ -113,6 +144,7 @@ export const Api = {
     },
     sseUrl: (vehicleId) => `${API_BASE}/sse/vehicles/${vehicleId}`,
   },
+
   users: {
     myHistory: () => http('/users/me/history', { timeoutMs: 12000 }),
     agenda: () => http('/users/me/agenda', { timeoutMs: 12000 }),
